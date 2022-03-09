@@ -26,9 +26,10 @@ check_asr () {
     wget "$ckpt_url" -O "$ckpt_path"
   fi
 
-  python examples/speech_recognition/new/infer.py \
+  PYTHONPATH=$(pwd) python examples/speech_recognition/new/infer.py \
     --config-dir examples/hubert/config/decode --config-name infer_viterbi \
     common_eval.path="${ckpt_path}" task.data="${test_dir}" task.normalize=true \
+    decoding.profiling=true \
     decoding.results_path="${test_dir}/pred" \
     common_eval.results_path="${test_dir}/pred" \
     common_eval.quiet=false dataset.gen_subset="${split}"

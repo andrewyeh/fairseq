@@ -17,6 +17,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import editdistance
 import torch
 import torch.distributed as dist
+from torch.profiler import profile, record_function, ProfilerActivity
+from examples.speech_recognition.new.profiling.prepare_model import prepare_model
+from examples.speech_recognition.new.profiling.summarize import summarize
 from examples.speech_recognition.new.decoders.decoder_config import (
     DecoderConfig,
     FlashlightDecoderConfig,
@@ -58,6 +61,10 @@ class DecodingConfig(DecoderConfig, FlashlightDecoderConfig):
         metadata={
             "help": "If set, write hypothesis and reference sentences into this directory"
         },
+    )
+    profiling: bool = field(
+        default=False,
+        metadata={"help": "If set, perform profiling on the model."},
     )
 
 
@@ -122,6 +129,9 @@ class InferenceProcessor:
         self.ref_units_file = None
 
         self.progress_bar = self.build_progress_bar()
+
+        if cfg.decoding.profiling:
+            self.models = [prepare_model(model=model) for model in self.models]
 
     def __enter__(self) -> "InferenceProcessor":
         if self.cfg.decoding.results_path is not None:
@@ -307,6 +317,18 @@ class InferenceProcessor:
             models=self.models,
             sample=sample,
         )
+
+        if self.cfg.decoding.profiling:
+            assert len(self.models) == 1
+            input_shape = sample["net_input"]["source"].shape
+            summary = summarize(model=self.models[0])
+            logger.info(
+                "\n\nprofiling: input shape = {}\n\n{}\n".format(
+                    sample["net_input"]["source"].shape,
+                    summary.to_markdown()
+                )
+            )
+
         num_generated_tokens = sum(len(h[0]["tokens"]) for h in hypos)
         self.gen_timer.stop(num_generated_tokens)
         self.wps_meter.update(num_generated_tokens)
